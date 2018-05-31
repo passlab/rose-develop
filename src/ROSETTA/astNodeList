@@ -546,6 +546,7 @@ SgOmpNumThreadsClause
 SgOmpOrderedClause
 SgOmpPrivateClause
 SgOmpReductionClause
+SgOmpInReductionClause
 SgOmpScheduleClause
 SgOmpSharedClause
 SgOmpUntiedClause
