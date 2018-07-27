@@ -142,8 +142,6 @@ ATbool ATermToUntypedJovialTraversal::traverse_MainProgramModule(ATerm term, SgU
          assert(function_scope != NULL);
       } else return ATfalse;
 
-      std::cout << "MAIN_PROGRAM_MODULE:\n";
-
       std::string label = "";
 
       SgUntypedInitializedNameList* param_list = new SgUntypedInitializedNameList();
@@ -232,11 +230,13 @@ ATbool ATermToUntypedJovialTraversal::traverse_ProgramBody(ATerm term, SgUntyped
          // MATCHED LabelList
       } else return ATfalse;
 
+#if 0
       std::cout << "PROGRAM BODY\n";
       std::cout << "  # decls = " << decl_list->get_decl_list().size() << "\n";
       std::cout << "  # stmts = " << stmt_list->get_stmt_list().size() << "\n";
       std::cout << "  # funcs = " << func_list->get_func_list().size() << "\n";
       std::cout << "  #labels = " <<     labels.size() << "\n\n";
+#endif
 
    // TODO - need list for labels in untyped IR
       assert(labels.size() <= 1);
@@ -397,15 +397,17 @@ ATbool ATermToUntypedJovialTraversal::traverse_IntegerItemDescription(ATerm term
    printf("... traverse_IntegerItemDescription: %s\n", ATwriteToString(term));
 #endif
 
-   ATerm t_round_or_truncate, t_size;
+   ATerm t_type, t_round_or_truncate, t_size;
    bool has_round_or_truncate, has_size;
    SgUntypedExpression* size;
    General_Language_Translation::ExpressionKind modifier_enum;
 
-   if (ATmatch(term, "IntegerItemDescription (<term>,<term>)", &t_round_or_truncate,&t_size)) {
+// The first term, t_type, comes from the lexer and is direct user input: "S", "s", "U", "u".
+// We disambiguate it via terms IntegerItemDescription or IntegerItemDescriptionU.
+   if (ATmatch(term, "IntegerItemDescription(<term>,<term>,<term>)", &t_type,&t_round_or_truncate,&t_size)) {
       *type = UntypedBuilder::buildType(SgUntypedType::e_int);
    }
-   else if (ATmatch(term, "IntegerItemDescriptionU(<term>,<term>)", &t_round_or_truncate,&t_size)) {
+   else if (ATmatch(term, "IntegerItemDescriptionU(<term>,<term>,<term>)", &t_type,&t_round_or_truncate,&t_size)) {
       *type = UntypedBuilder::buildType(SgUntypedType::e_uint);
    }
    else return ATfalse;
@@ -1015,10 +1017,6 @@ ATbool ATermToUntypedJovialTraversal::traverse_SimpleStatement(ATerm term, SgUnt
       //  IfStatement                 -> SimpleStatement
       //  CaseStatement               -> SimpleStatement
       //%%ProcedureCallStatement      -> SimpleStatement  %%AMBIGUOUS with AssignmentStatement
-      //  ReturnStatement             -> SimpleStatement
-      //  GotoStatement               -> SimpleStatement
-      //  ExitStatement               -> SimpleStatement
-      //  StopStatement               -> SimpleStatement
 
       else if (traverse_NullStatement(t_stmt, stmt_list)) {
          // MATCHED NullStatement
@@ -1030,6 +1028,18 @@ ATbool ATermToUntypedJovialTraversal::traverse_SimpleStatement(ATerm term, SgUnt
    else if (ATmatch(term, "SimpleStatement(<term>)", &t_stmt)) {
       if (traverse_AbortStatement(t_stmt, stmt_list)) {
          // MATCHED AbortStatement
+      }
+      else if (traverse_StopStatement(t_stmt, stmt_list)) {
+         // MATCHED StopStatement
+      }
+      else if (traverse_ExitStatement(t_stmt, stmt_list)) {
+         // MATCHED ExitStatement
+      }
+      else if (traverse_GotoStatement(t_stmt, stmt_list)) {
+         // MATCHED GotoStatement
+      }
+      else if (traverse_ReturnStatement(t_stmt, stmt_list)) {
+         // MATCHED ReturnStatement
       }
       else return ATfalse;
    }
@@ -1101,8 +1111,6 @@ ATbool ATermToUntypedJovialTraversal::traverse_AssignmentStatement(ATerm term, s
          // MATCHED Formula
       } else return ATfalse;
 
-      std::cout << "ASSIGNMENT STMT\n";
-
       assert(labels.size() <= 1);
       assert(  vars.size() == 1);
       assert(expr);
@@ -1117,6 +1125,141 @@ ATbool ATermToUntypedJovialTraversal::traverse_AssignmentStatement(ATerm term, s
 
 
    } else return ATfalse;
+
+   return ATtrue;
+}
+
+//========================================================================================
+// 4.6 RETURN STATEMENTS
+//----------------------------------------------------------------------------------------
+ATbool ATermToUntypedJovialTraversal::traverse_ReturnStatement(ATerm term, SgUntypedStatementList* stmt_list)
+{
+#if PRINT_ATERM_TRAVERSAL
+   printf("... traverse_ReturnStatement: %s\n", ATwriteToString(term));
+#endif
+
+   ATerm t_labels;
+   std::vector<std::string> labels;
+
+   if (ATmatch(term, "ReturnStatement(<term>)", &t_labels)) {
+      if (traverse_LabelList(t_labels, labels)) {
+         // MATCHED LabelList
+      } else return ATfalse;
+
+      std::string label("");
+      if (labels.size() == 1) {
+         label = labels[0];
+      }
+      else if (labels.size() > 1) {
+         cout << "ERROR: multiple labels unimplemented \n";
+         return ATfalse;
+      }
+
+      SgUntypedReturnStatement* return_stmt = new SgUntypedReturnStatement(label);
+      setSourcePosition(return_stmt, term);
+
+      stmt_list->get_stmt_list().push_back(return_stmt);
+   }
+   else return ATfalse;
+
+   return ATtrue;
+}
+
+//========================================================================================
+// 4.7 GOTO STATEMENTS
+//----------------------------------------------------------------------------------------
+ATbool ATermToUntypedJovialTraversal::traverse_GotoStatement(ATerm term, SgUntypedStatementList* stmt_list)
+{
+#if PRINT_ATERM_TRAVERSAL
+   printf("... traverse_GotoStatement: %s\n", ATwriteToString(term));
+#endif
+
+   ATerm t_labels, t_name;
+   std::vector<std::string> labels;
+   std::string name;
+
+    if (ATmatch(term, "GotoStatement(<term>,<term>)", &t_labels, &t_name)) {
+       if (traverse_LabelList(t_labels, labels)) {
+          // MATCHED LabelList
+       } else return ATfalse;
+
+       if (traverse_Name(t_name, name)) {
+          // MATCHED Name
+       } else return ATfalse;
+
+      SgUntypedGotoStatement* goto_stmt = new SgUntypedGotoStatement("", name);
+      setSourcePosition(goto_stmt, term);
+
+      stmt_list->get_stmt_list().push_back(goto_stmt);
+   }
+
+   else return ATfalse;
+
+   return ATtrue;
+
+}
+
+//========================================================================================
+// 4.8 EXIT STATEMENTS
+//----------------------------------------------------------------------------------------
+ATbool ATermToUntypedJovialTraversal::traverse_ExitStatement(ATerm term, SgUntypedStatementList* stmt_list)
+{
+#if PRINT_ATERM_TRAVERSAL
+   printf("... traverse_ExitStatement: %s\n", ATwriteToString(term));
+#endif
+
+   ATerm t_labels;
+   std::vector<std::string> labels;
+
+   if (ATmatch(term, "ExitStatement(<term>)", &t_labels)) {
+      if (traverse_LabelList(t_labels, labels)) {
+         // MATCHED LabelList
+      } else return ATfalse;
+
+      SgUntypedExitStatement* exit_stmt = new SgUntypedExitStatement("");
+      setSourcePosition(exit_stmt, term);
+
+      stmt_list->get_stmt_list().push_back(exit_stmt);
+   }
+   else return ATfalse;
+
+   return ATtrue;
+}
+
+//========================================================================================
+// 4.9 STOP STATEMENTS
+//----------------------------------------------------------------------------------------
+ATbool ATermToUntypedJovialTraversal::traverse_StopStatement(ATerm term, SgUntypedStatementList* stmt_list)
+{
+#if PRINT_ATERM_TRAVERSAL
+   printf("... traverse_StopStatement: %s\n", ATwriteToString(term));
+#endif
+
+   ATerm t_labels, t_stop_code;
+   std::vector<std::string> labels;
+   SgUntypedExpression* stop_code = NULL;
+
+   if (ATmatch(term, "StopStatement(<term>,<term>)", &t_labels, &t_stop_code)) {
+      if (traverse_LabelList(t_labels, labels)) {
+         // MATCHED LabelList
+      } else return ATfalse;
+
+      if (ATmatch(t_stop_code, "no-integer-formula()")) {
+         // No StopCode
+         stop_code = new SgUntypedNullExpression();
+         setSourcePositionUnknown(stop_code);
+      }
+      else if (traverse_IntegerFormula(t_stop_code, &stop_code)) {
+         // MATCHED IntegerFormula
+      } else return ATfalse;
+
+      SgToken::ROSE_Fortran_Keywords keyword = SgToken::FORTRAN_STOP;
+      SgUntypedExpressionStatement* stop_stmt = new SgUntypedExpressionStatement("", keyword, stop_code);
+      setSourcePosition(stop_stmt, term);
+
+      stmt_list->get_stmt_list().push_back(stop_stmt);
+   }
+   else return ATfalse;
 
    return ATtrue;
 }
@@ -1138,18 +1281,16 @@ ATbool ATermToUntypedJovialTraversal::traverse_AbortStatement(ATerm term, SgUnty
          // MATCHED LabelList
       } else return ATfalse;
 
-      // TODO - construct untyped node for AbortStatement
-      // SgUntypedAbortStatement* abort_stmt = new SgUntypedAbortStatement("");
-      // setSourcePosition(abort_stmt, term);
-      // TODO - add new node to stmt_list
-      // stmt_list->get_stmt_list().push_back(abort_stmt);
-      return ATfalse;
+      SgUntypedAbortStatement* abort_stmt = new SgUntypedAbortStatement("");
+      setSourcePosition(abort_stmt, term);
+
+      stmt_list->get_stmt_list().push_back(abort_stmt);
+
    }
    else return ATfalse;
 
    return ATtrue;
 }
-
 
 //========================================================================================
 // 5.0 FORMULAS
