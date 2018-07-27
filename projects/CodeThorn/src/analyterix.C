@@ -79,6 +79,7 @@ const char* csvConstResultFileName=0;
 const char* csvAddressTakenResultFileName=0;
 const char* csvDeadCodeUnreachableFileName = 0;
 const char* csvDeadCodeDeadStoreFileName = 0;
+string option_start_function="main";
 bool option_rd_analysis=false;
 bool option_ud_analysis=false;
 bool option_lv_analysis=false;
@@ -90,7 +91,9 @@ bool option_optimize_icfg=false;
 bool option_csv_stable=false;
 bool option_no_topological_sort=false;
 bool option_annotate_source_code=false;
-
+bool option_ignore_unknown_functions=false;
+bool option_inlining=false;
+bool option_normalize=false;
 //boost::program_options::variables_map args;
 
 void writeFile(std::string filename, std::string data) {
@@ -303,9 +306,6 @@ string getScopeAsMangledStableString(SgLocatedNode* stmt) {
 }
 
 void runAnalyses(SgProject* root, Labeler* labeler, VariableIdMapping* variableIdMapping) {
-
-  //SPRAY::DFAnalysisBase::normalizeProgram(root);
-
   if(option_fi_constanalysis) {
     FIConstAnalysis fiConstAnalysis(variableIdMapping);
     fiConstAnalysis.runAnalysis(root);
@@ -487,8 +487,10 @@ void runAnalyses(SgProject* root, Labeler* labeler, VariableIdMapping* variableI
     cout << "STATUS: initializing interval global variables."<<endl;
     intervalAnalyzer->initializeGlobalVariables(root);
       
+    intervalAnalyzer->setSkipSelectedFunctionCalls(option_ignore_unknown_functions);
+
     intervalAnalyzer->setSolverTrace(option_trace);
-    std::string funtofind="main";
+    std::string funtofind=option_start_function;
     RoseAst completeast(root);
     SgFunctionDefinition* startFunRoot=completeast.findFunctionByName(funtofind);
     intervalAnalyzer->determineExtremalLabels(startFunRoot,false);
@@ -508,7 +510,8 @@ void runAnalyses(SgProject* root, Labeler* labeler, VariableIdMapping* variableI
       ofstream deadCodeCsvFile;
       deadCodeCsvFile.open(deadCodeCsvFileName.c_str());
       // Iteratate over all CFG nodes/ labels:
-      for(Flow::const_node_iterator i = intervalAnalyzer->getFlow()->nodes_begin(); i != intervalAnalyzer->getFlow()->nodes_end(); ++i) {
+      Flow* flow=intervalAnalyzer->getFlow();
+      for(Flow::const_node_iterator i = flow->nodes_begin(); i != flow->nodes_end(); ++i) {
         const Label& label = *i;
         // Do not output a function call twice (only the function call label and not the function call return label):
         if(!intervalAnalyzer->getLabeler()->isFunctionCallReturnLabel(label)) {
@@ -519,16 +522,22 @@ void runAnalyses(SgProject* root, Labeler* labeler, VariableIdMapping* variableI
             ROSE_ASSERT(correspondingNode);
             // Do not output scope statements ({ }, ...)
             if(!isSgScopeStatement(correspondingNode)) {
-              deadCodeCsvFile << correspondingNode->get_file_info()->get_line()
-                              << "," << SPRAY::replace_string(correspondingNode->unparseToString(), ",", "/*comma*/")
-                              << endl;
+              int lineNr=correspondingNode->get_file_info()->get_line();
+              if(lineNr>0) {
+                deadCodeCsvFile << lineNr
+                                << "," << SPRAY::replace_string(correspondingNode->unparseToString(), ",", "/*comma*/")
+                                << endl;
+              }
+            } else {
+              //cout<<"DEBUG: EXCLUDING: "<<label.getId()<<" : "<<intervalAnalyzer->getLabeler()->getNode(label)->unparseToString()<<endl;
             }
           }
+        } else {
+          //cout<<"DEBUG: FUNCTION CALLRETURN LABEL: "<<label.getId()<<" : "<<intervalAnalyzer->getLabeler()->getNode(label)->unparseToString()<<endl;
         }
       }
       deadCodeCsvFile.close();
     }
-
     delete fipa;
   }
 
@@ -549,7 +558,7 @@ void runAnalyses(SgProject* root, Labeler* labeler, VariableIdMapping* variableI
     lvAnalysis->initializeTransferFunctions();
     cout << "STATUS: initializing LV global variables."<<endl;
     lvAnalysis->initializeGlobalVariables(root);
-    std::string funtofind="main";
+    std::string funtofind=option_start_function;
     RoseAst completeast(root);
     SgFunctionDefinition* startFunRoot=completeast.findFunctionByName(funtofind);
     cout << "generating icfg_backward.dot."<<endl;
@@ -654,7 +663,7 @@ void runAnalyses(SgProject* root, Labeler* labeler, VariableIdMapping* variableI
       cout << "generating icfg_forward.dot."<<endl;
       write_file("icfg_forward.dot", rdAnalysis->getFlow()->toDot(rdAnalysis->getLabeler()));
     
-      std::string funtofind="main";
+      std::string funtofind=option_start_function;
       RoseAst completeast(root);
       SgFunctionDefinition* startFunRoot=completeast.findFunctionByName(funtofind);
       rdAnalysis->determineExtremalLabels(startFunRoot);
@@ -685,9 +694,9 @@ void runAnalyses(SgProject* root, Labeler* labeler, VariableIdMapping* variableI
         createUDAstAttributeFromRDAttribute(rdAnalysis->getLabeler(),"rd-analysis-in", "ud-analysis");
         Flow* flow=rdAnalysis->getFlow();
         cout<<"Flow label-set size: "<<flow->nodeLabels().size()<<endl;
-        CFAnalysis* cfAnalyzer0=rdAnalysis->getCFAnalyzer();
-        int red=cfAnalyzer0->reduceBlockBeginNodes(*flow);
-        cout<<"INFO: eliminated "<<red<<" block-begin nodes in ICFG."<<endl;
+        //CFAnalysis* cfAnalyzer0=rdAnalysis->getCFAnalyzer();
+        //int red=cfAnalyzer0->reduceBlockBeginNodes(*flow);
+        //cout<<"INFO: eliminated "<<red<<" block-begin nodes in ICFG."<<endl;
         
 #if 0
         cout << "INFO: computing program statistics."<<endl;
@@ -788,8 +797,14 @@ int main(int argc, char* argv[]) {
       ("print-varid-mapping", "prints variableIdMapping")
       ("print-varid-mapping-array", "prints variableIdMapping with array element varids.")
       ("print-label-mapping", "prints mapping of labels to statements")
+      ("print-inter-flow", "prints inter-procedural information call/entry/exit/callreturn.")
       ("prefix",po::value< string >(), "set prefix for all generated files.")
+      ("start-function",po::value< string >(), "set name of function where analysis is supposed to start (default is 'main').")
+      ("ignore-unknown-functions","ignore unknown functions (assume those functions are side effect free)")
       ("csv-stable", "only output csv data that is stable/portable across environments.")
+      ("normalize", "normalize program (transform into lower-level IR).")
+      ("inline", "inline functions (can increase precision of analysis).")
+      ("unparse", "generate source code from internal representation.")
       ;
   //    ("int-option",po::value< int >(),"option info")
 
@@ -824,6 +839,9 @@ int main(int argc, char* argv[]) {
     }
     if(args.count("stats")) {
       option_stats=true;
+    }
+    if(args.count("start-function")) {
+      option_start_function = args["start-function"].as<string>();
     }
     if(args.count("rd-analysis")) {
       option_rd_analysis=true;
@@ -876,6 +894,9 @@ int main(int argc, char* argv[]) {
     if (args.count("no-topological-sort")) {
       option_no_topological_sort=true;
     }
+    if (args.count("ignore-unknown-functions")) {
+      option_ignore_unknown_functions=true;
+    }
 
     // clean up string-options in argv
     for (int i=1; i<argc; ++i) {
@@ -906,6 +927,16 @@ int main(int argc, char* argv[]) {
 
   cout<<"STATUS: computing variableid mapping"<<endl;
   ProgramAbstractionLayer* programAbstractionLayer=new ProgramAbstractionLayer();
+  if(args.count("inline")) {
+    programAbstractionLayer->setInliningOption(true);
+  }
+  if(args.count("normalize")) {
+    programAbstractionLayer->setLoweringOption(true);
+  }
+  if(programAbstractionLayer->getInliningOption() && !programAbstractionLayer->getLoweringOption()) {
+    cerr<<"Error: inlining option requires normalization option to be provided as well."<<endl;
+    return 0;
+  }
   programAbstractionLayer->initialize(root);
   if (args.count("print-varid-mapping-array")) {
     programAbstractionLayer->getVariableIdMapping()->setModeVariableIdForEachArrayElement(true);
@@ -926,6 +957,17 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  if(args.count("print-inter-flow")) {
+    CFAnalysis* cfAnalysis=new CFAnalysis(programAbstractionLayer->getLabeler());
+    Flow flow=cfAnalysis->flow(root);
+    if(option_optimize_icfg) {
+      cfAnalysis->optimizeFlow(flow);
+    }
+    InterFlow interFlow=cfAnalysis->interFlow(flow);
+    cout<<interFlow.toString()<<endl;
+    return 0;
+  }
+
   if(args.count("icfg-dot")) {
     CFAnalysis* cfAnalysis=new CFAnalysis(programAbstractionLayer->getLabeler());
     Flow flow=cfAnalysis->flow(root);
@@ -933,7 +975,9 @@ int main(int argc, char* argv[]) {
       cfAnalysis->optimizeFlow(flow);
     }
     InterFlow interFlow=cfAnalysis->interFlow(flow);
+    // merges interFlow into Flow
     cfAnalysis->intraInterFlow(flow,interFlow);
+    cout << "generating icfg.dot."<<endl;
     string dotString=flow.toDot(programAbstractionLayer->getLabeler());
     writeFile("icfg.dot",dotString);
 
@@ -948,6 +992,11 @@ int main(int argc, char* argv[]) {
 
   if(option_annotate_source_code) {
     cout << "INFO: generating annotated source code."<<endl;
+    root->unparse(0,0);
+  }
+
+  if(args.count("unparse")) {
+    cout << "INFO: generating source code from internal representation."<<endl;
     root->unparse(0,0);
   }
 

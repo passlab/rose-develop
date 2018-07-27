@@ -3311,11 +3311,12 @@ SgUntypedForStatement* SgUntypedForStatement::build_node_from_nonlist_children(S
    }
 
 
-SgUntypedGotoStatement* SgUntypedGotoStatement::build_node_from_nonlist_children(Sg_File_Info* startOfConstruct)
+// Rasmussen (4/18/2018): Added target_expression so that the goto statement has a place to go to.
+SgUntypedGotoStatement* SgUntypedGotoStatement::build_node_from_nonlist_children(Sg_File_Info* startOfConstruct, std::string target_label)
    {
 #if 0
   // debugging information!
-     printf ("In SgUntypedGotoStatement::build_node_from_nonlist_children (Sg_File_Info* startOfConstruct): this = %p = %s \n",this,this->class_name().c_str());
+     printf ("In SgUntypedGotoStatement::build_node_from_nonlist_children (Sg_File_Info* startOfConstruct, std::string target_label): this = %p = %s \n",this,this->class_name().c_str());
 #endif
 
      SgUntypedGotoStatement* returnNode = NULL;
@@ -3759,7 +3760,6 @@ SgUntypedNamedStatement* SgUntypedNamedStatement::build_node_from_nonlist_childr
      return returnNode;
    }
 
-//TODO: Rasmussen - figure out how to get this file generated
 SgUntypedExpressionStatement* SgUntypedExpressionStatement::build_node_from_nonlist_children ( Sg_File_Info* startOfConstruct, int statement_enum, SgUntypedExpression* statement_expression )
    {
 #if 0
@@ -4269,6 +4269,19 @@ SgForStatement* SgForStatement::build_node_from_nonlist_children ( Sg_File_Info*
 #endif
 
      SgForStatement* returnNode = NULL;
+
+     return returnNode;
+   }
+
+// DQ (3/28/2018): Added support for new IR nodes specific to range-based for loop in C++11.
+SgRangeBasedForStatement* SgRangeBasedForStatement::build_node_from_nonlist_children ( Sg_File_Info* startOfConstruct, SgVariableDeclaration* iterator_declaration, SgVariableDeclaration* range_declaration, SgVariableDeclaration* begin_declaration, SgVariableDeclaration* end_declaration, SgExpression* not_equal_expression, SgExpression* increment_expression, SgStatement* loop_body )
+   {
+#if 0
+  // debugging information!
+     printf ("In SgRangeBasedForStatement::build_node_from_nonlist_children (Sg_File_Info* startOfConstruct, SgVariableDeclaration* iterator_declaration, SgVariableDeclaration* range_declaration, SgVariableDeclaration* begin_declaration, SgVariableDeclaration* end_declaration, SgExpression* not_equal_expression, SgExpression* increment_expression, SgStatement* loop_body): this = %p = %s \n",this,this->class_name().c_str());
+#endif
+
+     SgRangeBasedForStatement* returnNode = NULL;
 
      return returnNode;
    }

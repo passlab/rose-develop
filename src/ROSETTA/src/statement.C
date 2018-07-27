@@ -67,6 +67,10 @@ Grammar::setUpStatements ()
 
      NEW_TERMINAL_MACRO (ForStatement,              "ForStatement",              "FOR_STMT");
      NEW_TERMINAL_MACRO (ForInitStatement,          "ForInitStatement",          "FOR_INIT_STMT" );
+
+  // DQ (3/25/2018): Adding Range-based For statement support (previously missed in C++11 support).
+     NEW_TERMINAL_MACRO (RangeBasedForStatement,    "RangeBasedForStatement",    "RANGE_BASED_FOR_STMT");
+
      NEW_TERMINAL_MACRO (CatchStatementSeq,         "CatchStatementSeq",         "CATCH_STATEMENT_SEQ" );
      NEW_TERMINAL_MACRO (FunctionParameterList,     "FunctionParameterList",     "FUNCTION_PARAMETER_LIST" );
      NEW_TERMINAL_MACRO (CtorInitializerList,       "CtorInitializerList",       "CTOR_INITIALIZER_LIST" );
@@ -418,11 +422,11 @@ Grammar::setUpStatements ()
   // Note that the associate statement is really a scope, with its own declarations of variables declared by reference to 
   // other variables or expressions.  They are only l-values if and only if the rhs is a l-value (I think).
      NEW_NONTERMINAL_MACRO (ScopeStatement,
-          Global                       | BasicBlock           | IfStmt               | ForStatement       | FunctionDefinition |
-          ClassDefinition              | WhileStmt            | DoWhileStmt          | SwitchStatement    | CatchOptionStmt    |
-          NamespaceDefinitionStatement | BlockDataStatement   | AssociateStatement   | FortranDo          | ForAllStatement    |
-          UpcForAllStatement           | CAFWithTeamStatement | JavaForEachStatement | JavaLabelStatement | MatlabForStatement |
-          FunctionParameterScope       | DeclarationScope  /* | TemplateInstantiationDefn */,
+          Global                       | BasicBlock           | IfStmt                    | ForStatement       | FunctionDefinition |
+          ClassDefinition              | WhileStmt            | DoWhileStmt               | SwitchStatement    | CatchOptionStmt    |
+          NamespaceDefinitionStatement | BlockDataStatement   | AssociateStatement        | FortranDo          | ForAllStatement    |
+          UpcForAllStatement           | CAFWithTeamStatement | JavaForEachStatement      | JavaLabelStatement | MatlabForStatement |
+          FunctionParameterScope       | DeclarationScope     | RangeBasedForStatement /* | TemplateInstantiationDefn */,
           "ScopeStatement","SCOPE_STMT", false);
 
   // DQ (3/22/2004): Added to support template member functions (removed MemberFunctionDeclaration as AstNodeClass)
@@ -889,6 +893,28 @@ Grammar::setUpStatements ()
      UpcForAllStatement.setDataPrototype ( "SgStatement*", "loop_body",        "= NULL",
                                      CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
 
+
+  // DQ (3/25/2018): Adding Range-based For statement support (previously missed in C++11 support).
+     RangeBasedForStatement.setFunctionPrototype ( "HEADER_RANGE_BASED_FOR_STATEMENT", "../Grammar/Statement.code" );
+
+     RangeBasedForStatement.setDataPrototype     ( "SgVariableDeclaration*", "iterator_declaration", "= NULL",
+                                     CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+     RangeBasedForStatement.setDataPrototype     ( "SgVariableDeclaration*", "range_declaration", "= NULL",
+                                     CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+
+     RangeBasedForStatement.setDataPrototype     ( "SgVariableDeclaration*", "begin_declaration", "= NULL",
+                                     CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+     RangeBasedForStatement.setDataPrototype     ( "SgVariableDeclaration*", "end_declaration", "= NULL",
+                                     CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+
+     RangeBasedForStatement.setDataPrototype     ( "SgExpression*", "not_equal_expression", "= NULL",
+                                     CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+     RangeBasedForStatement.setDataPrototype     ( "SgExpression*", "increment_expression", "= NULL",
+                                     CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+
+     RangeBasedForStatement.setDataPrototype ( "SgStatement*", "loop_body",        "= NULL",
+                                     CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, DEF_TRAVERSAL, NO_DELETE);
+
   // DQ (7/25/2014): Adding support for C11 static assertions.
      StaticAssertionDeclaration.setFunctionPrototype ( "HEADER_STATIC_ASSERTION_DECLARATION", "../Grammar/Statement.code" );
      StaticAssertionDeclaration.setDataPrototype ( "SgExpression*", "condition", "= NULL",
@@ -1147,6 +1173,14 @@ Grammar::setUpStatements ()
      FunctionDeclaration.setDataPrototype ( "bool","type_syntax_is_available", "= false",
                    NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
 
+  // DQ (4/12/2018): This is the parameter list that is used to support function prototypes where the 
+  // function parameter type or parameter names are different from the defining declaration (see example
+  // in C_tests/test2018_32.c).  This data member is only non-null when type_syntax_is_available == true.
+  // FunctionDeclaration.setDataPrototype ( "SgFunctionParameterList*", "parameterList_syntax", "= NULL",
+  //               NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE, CLONE_PTR);
+     FunctionDeclaration.setDataPrototype ( "SgFunctionParameterList*", "parameterList_syntax", "= NULL",
+                   NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
+
   // DQ (7/26/2014): Added support for C11 "_Noreturn" keyword (alternative noreturn specification).
   // This could maybe be moved to the SgFunctionModifier.
      FunctionDeclaration.setDataPrototype("bool","using_C11_Noreturn_keyword","= false",
@@ -1169,6 +1203,11 @@ Grammar::setUpStatements ()
   // templates and moved to be declarations outside of the template declarations (also effects the 
   // associated template instantiations).
      FunctionDeclaration.setDataPrototype ("bool", "marked_as_edg_normalization", "= false",
+            NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
+
+  // DQ (5/10/2018): Add a data member to record when this is an implicit function. Implicit functions can have no explicit 
+  // parameters and yet have function arguments where they are called (default type is int for such parameters).
+     FunctionDeclaration.setDataPrototype ("bool", "is_implicit_function", "= false",
             NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
 
 
@@ -2849,6 +2888,14 @@ Grammar::setUpStatements ()
      NamespaceAliasDeclarationStatement.setDataPrototype("bool","global_qualification_required","= false",
                                 NO_CONSTRUCTOR_PARAMETER, NO_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
 
+  // DQ (4/8/2018): WE need to add a new data member to support a namespace alias to another namespace alias (see test2018_26.C).
+  // Note that the namespaceDeclaration data member represents the semantics, but a namespaceAliasDeclaration will support
+  // the structure of the original source code.  Not clear if this should be traversed within the AST (not for now).
+     NamespaceAliasDeclarationStatement.setDataPrototype("bool","is_alias_for_another_namespace_alias","= false",
+                                NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
+     NamespaceAliasDeclarationStatement.setDataPrototype ("SgNamespaceAliasDeclarationStatement*", "namespaceAliasDeclaration", "= NULL",
+               NO_CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
+
 
      NamespaceDefinitionStatement.setFunctionPrototype ( "HEADER_NAMESPACE_DEFINITION_STATEMENT", "../Grammar/Statement.code" );
   // NamespaceDefinitionStatement.setDataPrototype ("SgDeclarationStatementPtrList", "declarationList", "",
@@ -3756,6 +3803,9 @@ Grammar::setUpStatements ()
      ForStatement.setFunctionSource         ( "SOURCE_FOR_STATEMENT", "../Grammar/Statement.code" );
   // ForStatement.editSubstitute            ( "$CLASSNAME", "SgForStatement" );
      ForStatement.editSubstitute            ( "get_body", "get_loop_body" );
+
+  // DQ (3/25/2018): Adding Range-based For statement support (previously missed in C++11 support).
+     RangeBasedForStatement.setFunctionSource         ( "SOURCE_RANGE_BASED_FOR_STATEMENT", "../Grammar/Statement.code" );
 
 
 #if USE_UPC_IR_NODES
