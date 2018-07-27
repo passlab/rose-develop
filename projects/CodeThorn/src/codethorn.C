@@ -49,6 +49,7 @@
 #include "AnalysisParameters.h"
 #include "SprayException.h"
 #include "CodeThornException.h"
+#include "ProgramInfo.h"
 
 #include "DataRaceDetection.h"
 #include "AstTermRepresentation.h"
@@ -269,7 +270,7 @@ CommandLineOptions& parseCommandLine(int argc, char* argv[], Sawyer::Message::Fa
     ("csv-spot-ltl", po::value< string >(), "Output SPOT's LTL verification results into a CSV file <arg>.")
     ("csv-stats-size-and-ltl",po::value< string >(),"Output statistics regarding the final model size and results for LTL properties into a CSV file <arg>.")
     ("check-ltl", po::value< string >(), "Take a text file of LTL I/O formulae <arg> and check whether or not the analyzed program satisfies these formulae. Formulae should start with '('. Use \"csv-spot-ltl\" option to specify an output csv file for the results.")
-    ("single-property", po::value< int >(), "Number (ID) of the property that is supposed to be analyzed. All other LTL properties will be ignored. ( Use \"check-ltl\" option to specify an input property file).")
+    ("single-property", po::value< int >(), "Number (ID) of the property that is supposed to be analyzed. All other LTL properties will be ignored. ( Use \"check-ltl\" option to specify a input property file).")
     ("counterexamples-with-output", po::value< bool >()->default_value(false)->implicit_value(true), "Reported counterexamples for LTL or reachability properties also include output values.")
     ("inf-paths-only", po::value< bool >()->default_value(false)->implicit_value(true), "Recursively prune the transition graph so that only infinite paths remain when checking LTL properties.")
     ("io-reduction", po::value< int >(), "(work in progress) Reduce the transition system to only input/output/worklist states after every <arg> computed EStates.")
@@ -298,6 +299,7 @@ CommandLineOptions& parseCommandLine(int argc, char* argv[], Sawyer::Message::Fa
 
   passOnToRose.add_options()
     (",I", po::value< vector<string> >(),"Include directories.")
+    (",D", po::value< vector<string> >(),"Define constants for preprocessor.")
     (",std", po::value< string >(),"Compilation standard.")
     ("edg:no_warnings", po::bool_switch(),"EDG frontend flag.")
     ;
@@ -358,19 +360,26 @@ CommandLineOptions& parseCommandLine(int argc, char* argv[], Sawyer::Message::Fa
     ;
 
   experimentalOptions.add_options()
-    ("normalize", po::value< bool >()->default_value(false)->implicit_value(true),"Normalize AST before analysis .")
+    ("normalize", po::value< bool >()->default_value(false)->implicit_value(true),"Normalize function calls before analysis (does not apply to conditions).")
+    ("lowering", po::value< bool >()->default_value(false)->implicit_value(true),"Lower AST before analysis (includes normalization).")
     ("inline", po::value< bool >()->default_value(false)->implicit_value(false),"inline functions before analysis .")
+    ("inlinedepth",po::value< int >()->default_value(10),"Default value is 10. A higher value inlines more levels of function calls.")
     ("eliminate-compound-assignments", po::value< bool >()->default_value(true)->implicit_value(true),"Replace all compound-assignments by assignments.")
     ("annotate-terms", po::value< bool >()->default_value(false)->implicit_value(true),"Annotate term representation of expressions in unparsed program.")
     ("eliminate-stg-back-edges", po::value< bool >()->default_value(false)->implicit_value(true), "Eliminate STG back-edges (STG becomes a tree).")
     ("generate-assertions", po::value< bool >()->default_value(false)->implicit_value(true),"Generate assertions (pre-conditions) in program and output program (using ROSE unparser).")
     ("precision-exact-constraints", po::value< bool >()->default_value(false)->implicit_value(true),"Use precise constraint extraction.")
-    ("trace-file", po::value< string >(), "Generate STG computation trace and write to file <arg>.")
+    ("stg-trace-file", po::value< string >(), "Generate STG computation trace and write to file <arg>.")
     ("explicit-arrays", po::value< bool >()->default_value(true)->implicit_value(true),"Represent all arrays explicitly in every state.")
     ("z3", "RERS specific reachability analysis using z3.")	
     ("rers-upper-input-bound", po::value< int >(), "RERS specific parameter for z3.")
     ("rers-verifier-error-number",po::value< int >(), "RERS specific parameter for z3.")
     ("ssa",  po::value< bool >()->default_value(false)->implicit_value(true), "Generate SSA form (only works for programs without function calls, loops, jumps, pointers and returns).")
+    ("null-pointer-analysis-file",po::value< string >(),"Perform null pointer analysis and write results to file [arg].")
+    ("program-stats",po::value< bool >()->default_value(false)->implicit_value(true),"print some basic program statistics about used language constructs.")
+    ("in-state-string-literals",po::value< bool >()->default_value(false)->implicit_value(true),"create string literals in initial state.")
+    ("std-functions",po::value< bool >()->default_value(true)->implicit_value(true),"model std function semantics (malloc, memcpy, etc). Must be turned off explicitly.")
+    ("ignore-unknown-functions",po::value< bool >()->default_value(true)->implicit_value(true), "Unknown functions are assumed to be side-effect free.")
     ;
 
   rersOptions.add_options()
@@ -443,7 +452,7 @@ CommandLineOptions& parseCommandLine(int argc, char* argv[], Sawyer::Message::Fa
     ("status", po::value< bool >()->default_value(false)->implicit_value(true), "Show status messages.")
     ("reduce-cfg", po::value< bool >()->default_value(true)->implicit_value(true), "Reduce CFG nodes that are irrelevant for the analysis.")
     ("internal-checks", "Run internal consistency checks (without input program).")
-    ("cl-options",po::value< string >(),"Specify command line options for the analyzed program (as one quoted string).")
+    ("cl-args",po::value< string >(),"Specify command line options for the analyzed program (as one quoted string).")
     ("input-values",po::value< string >(),"Specify a set of input values. (e.g. \"{1,2,3}\")")
     ("input-values-as-constraints", po::value< bool >()->default_value(false)->implicit_value(true),"Represent input var values as constraints (otherwise as constants in PState).")
     ("input-sequence",po::value< string >(),"Specify a sequence of input values. (e.g. \"[1,2,3]\")")
@@ -460,6 +469,7 @@ CommandLineOptions& parseCommandLine(int argc, char* argv[], Sawyer::Message::Fa
     ("rewrite","Rewrite AST applying all rewrite system rules.")
     ("run-rose-tests", "Run ROSE AST tests.")
     ("threads",po::value< int >(),"(experimental) Run analyzer in parallel using <arg> threads.")
+    ("unparse",po::value< bool >()->default_value(false)->implicit_value(true),"unpare code (only relevant for inlining, normalization, and lowering)")
     ("version,v", "Display the version of CodeThorn.")
     ;
 
@@ -560,14 +570,6 @@ CommandLineOptions& parseCommandLine(int argc, char* argv[], Sawyer::Message::Fa
       logger[ERROR] << "Option \"-std\" requires an argument." << endl;
       ROSE_ASSERT(0);
     }
-#if 0
-    string iPrefix = "-I";
-    if(currentArg.substr(0, iPrefix.size()) == iPrefix && 
-       (currentArg.size()>iPrefix.size() && currentArg[2] != '/') ) {
-      logger[ERROR] << "Option \"-I\" should be followed by either a slash or a whitespace." << endl;
-      ROSE_ASSERT(0);
-    }
-#endif
   }
 
   // Remove all CodeThorn-specific elements of argv (do not confuse ROSE frontend)
@@ -585,8 +587,12 @@ CommandLineOptions& parseCommandLine(int argc, char* argv[], Sawyer::Message::Fa
       continue;
     } else {
       string iPrefix = "-I/";
+      string dPrefix = "-D"; // special case, cannot contain separating space
       string stdPrefix = "-std=";
       if(currentArg.substr(0, iPrefix.size()) == iPrefix) {
+	continue;
+      }
+      if(currentArg.substr(0, dPrefix.size()) == dPrefix) {
 	continue;
       }
       if(currentArg.substr(0, stdPrefix.size()) == stdPrefix) {
@@ -860,15 +866,14 @@ void analyzerSetup(IOAnalyzer* analyzer, Sawyer::Message::Facility logger) {
     args.setOption("with-ltl-counterexamples",true);
   }
 
-  if(args.count("trace-file")) {
-    analyzer->setStgTraceFileName(args["trace-file"].as<string>());
+  if(args.count("stg-trace-file")) {
+    analyzer->setStgTraceFileName(args["stg-trace-file"].as<string>());
   }
 
-  if (args.isDefined("cl-options")) {
-    string clOptions=args.getString("cl-options");
+  if (args.isDefined("cl-args")) {
+    string clOptions=args.getString("cl-args");
     vector<string> clOptionsVector=Parse::commandLineArgs(clOptions);
     analyzer->setCommandLineOptions(clOptionsVector);
-    // TODO set this result and create initial state
   }
 
   if(args.count("input-values")) {
@@ -1029,6 +1034,10 @@ void analyzerSetup(IOAnalyzer* analyzer, Sawyer::Message::Facility logger) {
 int main( int argc, char * argv[] ) {
   ROSE_INITIALIZE;
 
+  Rose::global_options.set_frontend_notes(false);
+  Rose::global_options.set_frontend_warnings(false);
+  Rose::global_options.set_backend_warnings(false);
+
   signal(SIGSEGV, handler);   // install handler for backtrace
   CodeThorn::initDiagnostics();
 
@@ -1119,6 +1128,9 @@ int main( int argc, char * argv[] ) {
         return 0;
     }
 
+    analyzer->optionStringLiteralsInState=args.getBool("in-state-string-literals");
+    analyzer->setSkipSelectedFunctionCalls(args.getBool("ignore-unknown-functions"));
+    analyzer->setStdFunctionSemantics(args.getBool("std-functions"));
     analyzerSetup(analyzer, logger);
 
     if(args.count("threads")) {
@@ -1222,25 +1234,57 @@ int main( int argc, char * argv[] ) {
 
     vector<string> argvList(argv,argv+argc);
     if(args.getBool("omp-ast")||args.getBool("data-race")) {
-      cout<<"INFO: using OpenMP AST."<<endl;
+      logger[TRACE]<<"selected OpenMP AST."<<endl;
       argvList.push_back("-rose:OpenMP:ast_only");
     }
     SgProject* sageProject = frontend(argvList);
+    logger[TRACE] << "Parsing and creating AST: finished."<<endl;
     double frontEndRunTime=timer.getElapsedTimeInMilliSec();
 
-    logger[TRACE] << "INIT: Parsing and creating AST: finished."<<endl;
+    /* perform inlining before variable ids are computed, because
+       variables are duplicated by inlining. */
+    Lowering lowering;
+    if(args.getBool("normalize")) {
+      bool fcallsOnly=true;
+      lowering.normalizeExpressions(sageProject,fcallsOnly);
+      logger[TRACE]<<"STATUS: normalized expressions with fcalls (if not a condition)"<<endl;
+    }
 
-    // perform inlining before variable ids are computed, because variables are duplicated by inlining.
-    if(args.count("inline")) {
-      Lowering lowering;
+    if(args.getBool("lowering")) {
+      lowering.runLowering(sageProject);
+      cout<<"STATUS: lowered language constructs."<<endl;
+    }
+
+    /* perform inlining before variable ids are computed, because
+     * variables are duplicated by inlining. */
+    if(args.getBool("inline")) {
+      lowering.inlineDepth=args.getInt("inlinedepth");
       size_t numInlined=lowering.inlineFunctions(sageProject);
-      logger[TRACE]<<"STATUS: inlined "<<numInlined<<" functions"<<endl;
+      logger[TRACE]<<"inlined "<<numInlined<<" functions"<<endl;
+    }
+
+    if(args.getBool("program-stats")) {
+      ProgramInfo programInfo(sageProject);
+      programInfo.compute();
+      programInfo.printDetailed();
+      exit(0);
+    }
+
+    if(args.getBool("unparse")) {
+      sageProject->unparse(0,0);
+      exit(0);
     }
 
     analyzer->getVariableIdMapping()->computeVariableSymbolMapping(sageProject);
+    cout<<"STATUS: registered string literals: "<<analyzer->getVariableIdMapping()->numberOfRegisteredStringLiterals()<<endl;
 
+    
+    if(args.getBool("print-varid-mapping")) {
+      analyzer->getVariableIdMapping()->toStream(cout);
+    }
+    
     if(args.count("run-rose-tests")) {
-      logger[TRACE] << "INIT: Running ROSE AST tests."<<endl;
+      cout << "ROSE tests started."<<endl;
       // Run internal consistency tests on AST
       AstTests::runAllTests(sageProject);
 
@@ -1258,6 +1302,7 @@ int main( int argc, char * argv[] ) {
         }
         delete evaluator;
       }
+      cout << "ROSE tests finished."<<endl;
       mfacilities.shutdown();
       return 0;
     }
@@ -1469,6 +1514,13 @@ int main( int argc, char * argv[] ) {
 	ssaGen->generateSSAForm();
 
 	exit(0);
+    }
+
+    if(args.isDefined("null-pointer-analysis-file")) {
+      NullPointerDereferenceLocations nullPointerDereferenceLocations=analyzer->getExprAnalyzer()->getNullPointerDereferenceLocations();
+      string fileName=args.getString("null-pointer-analysis-file");
+      cout<<"Writing null-pointer analysis results to file "<<fileName<<endl;
+      nullPointerDereferenceLocations.writeResultFile(fileName,analyzer->getLabeler());
     }
 
     long pstateSetSize=analyzer->getPStateSet()->size();
@@ -1967,9 +2019,6 @@ int main( int argc, char * argv[] ) {
       sageProject->unparse(0,0);
     }
 
-    if(args.getBool("print-varid-mapping")) {
-      analyzer->getVariableIdMapping()->toStream(cout);
-    }
     // reset terminal
     cout<<color("normal")<<"done."<<endl;
 

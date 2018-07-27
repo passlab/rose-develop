@@ -17,6 +17,12 @@
 #include "UntypedJovialConverter.h"
 
 #define DEBUG_EXPERIMENTAL_JOVIAL 0
+#define OUTPUT_WHOLE_GRAPH_AST 0
+#define OUTPUT_DOT_FILE_AST 0
+
+#if OUTPUT_WHOLE_GRAPH_AST
+#  include "wholeAST_API.h"
+#endif
 
 int jovial_main(int argc, char** argv, SgSourceFile* sg_source_file)
    {
@@ -98,10 +104,11 @@ int jovial_main(int argc, char** argv, SgSourceFile* sg_source_file)
      std::cout << "\nSUCCESSFULLY traversed Jovial parse-tree" << "\n\n";
 #endif
 
-  // Rasmussen (11/9/17): Create a dot file.  This is temporary or should
-  // at least be a rose option.
+#if OUTPUT_DOT_FILE_AST
+  // Generate dot file for untyped nodes.
      SgUntypedGlobalScope* global_scope = aterm_traversal->get_scope();
      generateDOT(global_scope, filenameWithoutPath + ".ut");
+#endif
 
   // Step 3 - Traverse the SgUntypedFile object and convert to regular sage nodes
   // ------
@@ -115,8 +122,17 @@ int jovial_main(int argc, char** argv, SgSourceFile* sg_source_file)
   // Traverse the untyped tree and convert to sage nodes
      sg_traversal.traverse(aterm_traversal->get_file(),scope);
 
+#if OUTPUT_DOT_FILE_AST
   // Generate dot file for Sage nodes.
      generateDOT(SageBuilder::getGlobalScopeFromScopeStack(), filenameWithoutPath);
+#endif
+
+#if OUTPUT_WHOLE_GRAPH_AST
+     std::vector<std::string> argList;
+     argList.push_back("-DSKIP_ROSE_BUILTIN_DECLARATIONS");
+     CustomMemoryPoolDOTGeneration::s_Filter_Flags* filter_flags = new CustomMemoryPoolDOTGeneration::s_Filter_Flags(argList);
+     generateWholeGraphOfAST(filenameWithoutPath+"_WholeAST", filter_flags);
+#endif
 
      if (aterm_traversal)  delete aterm_traversal;
 

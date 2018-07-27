@@ -56,6 +56,31 @@ void Analyzer::initDiagnostics() {
   }
 }
 
+void Analyzer::enableSVCompFunctionSemantics() {
+  _svCompFunctionSemantics=true;
+  exprAnalyzer.setSVCompFunctionSemantics(true);
+  _externalErrorFunctionName="__VERIFIER_error";
+  _externalNonDetIntFunctionName="__VERIFIER_nondet_int";
+  _externalNonDetLongFunctionName="__VERIFIER_nondet_long";
+  _externalExitFunctionName="exit";
+}
+
+void Analyzer::disableSVCompFunctionSemantics() {
+  _svCompFunctionSemantics=false;
+  exprAnalyzer.setSVCompFunctionSemantics(false);
+  _externalErrorFunctionName="";
+  _externalNonDetIntFunctionName="";
+  _externalNonDetLongFunctionName="";
+  _externalExitFunctionName="";
+  ROSE_ASSERT(getLabeler());
+  getLabeler()->setExternalNonDetIntFunctionName(_externalNonDetIntFunctionName);
+  getLabeler()->setExternalNonDetLongFunctionName(_externalNonDetLongFunctionName);
+}
+
+bool Analyzer::svCompFunctionSemantics() { return _svCompFunctionSemantics; }
+bool Analyzer::getStdFunctionSemantics() { return exprAnalyzer.getStdFunctionSemantics(); }
+void Analyzer::setStdFunctionSemantics(bool flag) { exprAnalyzer.setStdFunctionSemantics(flag); }
+
 // TODO: move to flow analyzer (reports label,init,final sets)
 string Analyzer::astNodeInfoAttributeAndNodeToString(SgNode* node) {
   string textual;
@@ -77,27 +102,6 @@ bool Analyzer::isFunctionCallWithAssignment(Label lab,VariableId* varIdPtr){
     }
   }
   return false;
-}
-
-void Analyzer::enableSVCompFunctionSemantics() {
-  _svCompFunctionSemantics=true;
-  exprAnalyzer.setSVCompFunctionSemantics(true);
-  _externalErrorFunctionName="__VERIFIER_error";
-  _externalNonDetIntFunctionName="__VERIFIER_nondet_int";
-  _externalNonDetLongFunctionName="__VERIFIER_nondet_long";
-  _externalExitFunctionName="exit";
-}
-
-void Analyzer::disableSVCompFunctionSemantics() {
-  _svCompFunctionSemantics=false;
-  exprAnalyzer.setSVCompFunctionSemantics(false);
-  _externalErrorFunctionName="";
-  _externalNonDetIntFunctionName="";
-  _externalNonDetLongFunctionName="";
-  _externalExitFunctionName="";
-  ROSE_ASSERT(getLabeler());
-  getLabeler()->setExternalNonDetIntFunctionName(_externalNonDetIntFunctionName);
-  getLabeler()->setExternalNonDetLongFunctionName(_externalNonDetLongFunctionName);
 }
 
 void Analyzer::writeWitnessToFile(string filename) {
@@ -157,7 +161,8 @@ Analyzer::Analyzer():
   pstateSet.max_load_factor(0.7);
   constraintSetMaintainer.max_load_factor(0.7);
   resetInputSequenceIterator();
-}
+  exprAnalyzer.setAnalyzer(this);
+ }
 
 Analyzer::~Analyzer() {
 }
@@ -706,6 +711,20 @@ EState Analyzer::analyzeVariableDeclaration(SgVariableDeclaration* decl,EState c
           AbstractValue lhsAbstractAddress=AbstractValue(initDeclVarId); // creates a pointer to initDeclVar
           list<SingleEvalResultConstInt> res=exprAnalyzer.evaluateExpression(rhs,currentEState,true);
 
+          if(res.size()!=1) {
+            if(res.size()>1) {
+              cerr<<"Error: multiple results in rhs evaluation."<<endl;
+            } else {
+              //cerr<<"INFO: no results in rhs evaluation."<<endl;
+              EState estate=currentEState;
+              PState newPState=*estate.pstate();
+              newPState.writeToMemoryLocation(lhsAbstractAddress,CodeThorn::Top());
+              ConstraintSet cset=*estate.constraints();
+              return createEState(targetLabel,newPState,cset);
+            }
+            cerr<<"expr: "<<SgNodeHelper::sourceLineColumnToString(decl)<<": "<<decl->unparseToString()<<endl;
+            exit(1);
+          }
           ROSE_ASSERT(res.size()==1);
           SingleEvalResultConstInt evalResult=*res.begin();
 
@@ -883,6 +902,21 @@ std::list<EState> Analyzer::elistify(EState res) {
   return resList;
 }
 
+// wrapper function for reusing exprAnalyzer's function
+list<EState> Analyzer::evaluateFunctionCallArguments(Edge edge, SgFunctionCallExp* funCall, EState currentEState, bool useConstraints) {
+  list<SingleEvalResultConstInt> evalResultList=exprAnalyzer.evalFunctionCallArguments(funCall, currentEState, useConstraints);
+  ROSE_ASSERT(evalResultList.size()>0);
+  list<SingleEvalResultConstInt>::iterator resultListIter=evalResultList.begin();
+  SingleEvalResultConstInt evalResult=*resultListIter;
+  if(evalResultList.size()>1) {
+    logger[ERROR] <<"multi-state generating operators in function call parameters not supported."<<endl;
+    exit(1);
+  }
+  PState newPState=*evalResult.estate.pstate();
+  ConstraintSet cset=*evalResult.estate.constraints();
+  return elistify(createEState(edge.target(),newPState,cset));
+}
+
 list<EState> Analyzer::transferEdgeEState(Edge edge, const EState* estate) {
   ROSE_ASSERT(edge.source()==estate->label());
   //cout<<"ESTATE: "<<estate->toString(getVariableIdMapping())<<endl;
@@ -908,20 +942,19 @@ list<EState> Analyzer::transferEdgeEState(Edge edge, const EState* estate) {
     return transferFunctionExit(edge,estate);
   } else if(getLabeler()->isFunctionCallReturnLabel(edge.source())) {
     return transferFunctionCallReturn(edge,estate);
-  } else if(SgNodeHelper::Pattern::matchFunctionCall(nextNodeToAnalyze1)
-     ||edge.isType(EDGE_EXTERNAL)
-     ||edge.isType(EDGE_CALLRETURN)) {
-    // this is supposed to be dead code meanwhile
-    ROSE_ASSERT(false);
-    // special case external call
-    //EState newEState=currentEState;
-    //newEState.setLabel(edge.target());
-    //return elistify(newEState);
   } else if(SgVariableDeclaration* decl=isSgVariableDeclaration(nextNodeToAnalyze1)) {
     return transferVariableDeclaration(decl,edge,estate);
   } else if(isSgExprStatement(nextNodeToAnalyze1) || SgNodeHelper::isForIncExpr(nextNodeToAnalyze1)) {
     return transferExprStmt(nextNodeToAnalyze1, edge, estate);
+  } else if(SgFunctionCallExp* funCall=SgNodeHelper::Pattern::matchFunctionCall(nextNodeToAnalyze1)) {
+    // TODO: this case should be handled as part of transferExprStmt (or ExpressionRoot)
+    //cout<<"DEBUG: function call"<<(isCondition?" (inside condition) ":"")<<nextNodeToAnalyze1->unparseToString()<<endl;
+    // this case cannot happen for normalized code
+    bool useConstraints=false;
+    return evaluateFunctionCallArguments(edge,funCall,*estate,useConstraints);
   } else {
+      ROSE_ASSERT(!edge.isType(EDGE_EXTERNAL));
+      ROSE_ASSERT(!edge.isType(EDGE_CALLRETURN));
     // nothing to analyze, just create new estate (from same State) with target label of edge
     // can be same state if edge is a backedge to same cfg node
     EState newEState=currentEState;
@@ -938,6 +971,22 @@ list<EState> Analyzer::transferIdentity(Edge edge, const EState* estate) {
   return elistify(newEState);
 }
 
+void Analyzer::initializeStringLiteralsInState(PState& initialPState) {
+  ROSE_ASSERT(getVariableIdMapping());
+  //cout<<"DEBUG: TODO: initializeStringLiteralsInState"<<endl;
+  std::map<SgStringVal*,VariableId>* map=getVariableIdMapping()->getStringLiteralsToVariableIdMapping();
+  for(auto iter=map->begin();iter!=map->end();++iter) {
+    auto dataPair=*iter;
+    SgStringVal* stringValNode=dataPair.first;
+    VariableId stringVarId=dataPair.second;
+    string theString=stringValNode->get_value();
+    for(int pos=0;pos<(int)theString.size();pos++) {
+      AbstractValue character(theString[pos]);
+      initialPState.writeToMemoryLocation(AbstractValue::createAddressOfArrayElement(stringVarId,pos),character);
+    }
+  }
+}
+
 void Analyzer::initializeCommandLineArgumentsInState(PState& initialPState) {
   // TODO1: add formal paramters of solo-function
   // SgFunctionDefinition* startFunRoot: node of function
@@ -949,11 +998,17 @@ void Analyzer::initializeCommandLineArgumentsInState(PState& initialPState) {
   size_t mainFunArgNr=0;
   for(SgInitializedNamePtrList::iterator i=initNamePtrList.begin();i!=initNamePtrList.end();++i) {
     VariableId varId=variableIdMapping.variableId(*i);
-    if(functionName=="main") {
+    if(functionName=="main" && initNamePtrList.size()==2) {
       //string varName=getVariableIdMapping()->variableName(varId)) {
       switch(mainFunArgNr) {
-      case 0: argcVarId=varId;break;
-      case 1: argvVarId=varId;break;
+      case 0:
+	argcVarId=varId;
+	logger[TRACE]<<"INIT CLARGS: found argc in main function."<<endl;
+	break;
+      case 1:
+	argvVarId=varId;
+	logger[TRACE]<<"INIT CLARGS: found argv in main function."<<endl;
+	break;
       default:
         throw CodeThorn::Exception("Error: main function has more than 2 parameters.");
       }
@@ -964,39 +1019,52 @@ void Analyzer::initializeCommandLineArgumentsInState(PState& initialPState) {
     //initialPState[varId]=AbstractValue(CodeThorn::Top());
     initialPState.writeTopToMemoryLocation(varId);
   }
-  if(_commandLineOptions.size()>0) {
-
-    // create command line option array argv and argc in initial pstate
-    int argc=0;
-    VariableId argvArrayMemoryId=variableIdMapping.createAndRegisterNewMemoryRegion("$argvmem",(int)_commandLineOptions.size());
-    AbstractValue argvAddress=AbstractValue::createAddressOfArray(argvArrayMemoryId);
-    initialPState.writeToMemoryLocation(argvVarId,argvAddress);
-    for (auto argvElem:_commandLineOptions) {
-      cout<<"Initial state: "
-          <<variableIdMapping.variableName(argvVarId)<<"["<<argc+1<<"]: "
-          <<argvElem;
-      int regionSize=(int)string(argvElem).size();
-      cout<<" size: "<<regionSize<<endl;
-
-      stringstream memRegionName;
-      memRegionName<<"$argv"<<argc<<"mem";
-      VariableId argvElemArrayMemoryId=variableIdMapping.createAndRegisterNewMemoryRegion(memRegionName.str(),regionSize);
-      AbstractValue argvElemAddress=AbstractValue::createAddressOfArray(argvElemArrayMemoryId);
-      initialPState.writeToMemoryLocation(AbstractValue::createAddressOfArrayElement(argvVarId,argc),argvElemAddress);
-
-      // copy concrete command line argument strings char by char to State
-      for(int j=0;_commandLineOptions[argc][j]!=0;j++) {
-        cout<<"Copying: @argc="<<argc<<" char: "<<_commandLineOptions[argc][j]<<endl;
-        AbstractValue argvElemAddressWithIndexOffset;
-        AbstractValue AbstractIndex=AbstractValue(j);
-        argvElemAddressWithIndexOffset=argvElemAddress+AbstractIndex;
-        initialPState.writeToMemoryLocation(argvElemAddressWithIndexOffset,AbstractValue(_commandLineOptions[argc][j]));
+  // if function main exists and has 2 arguments then argcvarid and argvvarid have valid ids now.
+  // otherwise the command line options are ignored (because this is the correct behaviour)
+  if(argcVarId.isValid() && argvVarId.isValid()) {
+    if(_commandLineOptions.size()>0) {
+      // create command line option array argv and argc in initial pstate if argv and argc exist in the program
+      int argc=0;
+      VariableId argvArrayMemoryId=variableIdMapping.createAndRegisterNewMemoryRegion("$argvmem",(int)_commandLineOptions.size());
+      AbstractValue argvAddress=AbstractValue::createAddressOfArray(argvArrayMemoryId);
+      initialPState.writeToMemoryLocation(argvVarId,argvAddress);
+      for (auto argvElem:_commandLineOptions) {
+	logger[TRACE]<<"INIT: Initial state: "
+		     <<variableIdMapping.variableName(argvVarId)<<"["<<argc+1<<"]: "
+		     <<argvElem<<endl;
+	int regionSize=(int)string(argvElem).size();
+	logger[TRACE]<<"argv["<<argc+1<<"] size: "<<regionSize<<endl;
+	
+	stringstream memRegionName;
+	memRegionName<<"$argv"<<argc<<"mem";
+	VariableId argvElemArrayMemoryId=variableIdMapping.createAndRegisterNewMemoryRegion(memRegionName.str(),regionSize);
+	AbstractValue argvElemAddress=AbstractValue::createAddressOfArray(argvElemArrayMemoryId);
+	initialPState.writeToMemoryLocation(AbstractValue::createAddressOfArrayElement(argvVarId,argc),argvElemAddress);
+	
+	// copy concrete command line argument strings char by char to State
+	for(int j=0;_commandLineOptions[argc][j]!=0;j++) {
+	  logger[TRACE]<<"INIT: Copying: @argc="<<argc<<" char: "<<_commandLineOptions[argc][j]<<endl;
+	  AbstractValue argvElemAddressWithIndexOffset;
+	  AbstractValue AbstractIndex=AbstractValue(j);
+	  argvElemAddressWithIndexOffset=argvElemAddress+AbstractIndex;
+	  initialPState.writeToMemoryLocation(argvElemAddressWithIndexOffset,AbstractValue(_commandLineOptions[argc][j]));
+	}
+	argc++;
       }
-      argc++;
+      // this also covers the case that no command line options were provided. In this case argc==0. argv is non initialized.
+      logger[TRACE]<<"INIT: Initial state argc:"<<argc<<endl;
+      AbstractValue abstractValueArgc(argc);
+      initialPState.writeToMemoryLocation(argcVarId,abstractValueArgc);
+    } else {
+      // argc and argv present in program but no command line arguments provided
+      logger[TRACE]<<"INIT: no command line arguments provided. Initializing argc=0."<<endl;
+      AbstractValue abstractValueArgc(0);
+      initialPState.writeToMemoryLocation(argcVarId,abstractValueArgc);
     }
-    cout<<"Initial state argc:"<<argc<<endl;
-    AbstractValue abstractValueArgc(argc);
-    initialPState.writeToMemoryLocation(argcVarId,abstractValueArgc);
+  } else {
+    // argv and argc not present in program. argv and argc are not added to initialPState.
+    // in this case it is irrelevant whether command line arguments were provided (correct behaviour)
+    // nothing to do.
   }
 }
 
@@ -1056,9 +1124,12 @@ void Analyzer::initializeSolver(std::string functionToStartAt,SgNode* root, bool
   // create empty state
   PState initialPState;
   initializeCommandLineArgumentsInState(initialPState);
+  if(optionStringLiteralsInState) {
+    initializeStringLiteralsInState(initialPState);
+  }
   const PState* initialPStateStored=processNew(initialPState);
   ROSE_ASSERT(initialPStateStored);
-  logger[TRACE]<< "INIT: initial state(stored): "<<initialPStateStored->toString()<<endl;
+  logger[TRACE]<< "INIT: initial state(stored): "<<initialPStateStored->toString(getVariableIdMapping())<<endl;
   ROSE_ASSERT(cfanalyzer);
   ConstraintSet cset;
   const ConstraintSet* emptycsetstored=constraintSetMaintainer.processNewOrExisting(cset);
@@ -1441,9 +1512,17 @@ int Analyzer::reachabilityAssertCode(const EState* currentEStatePtr) {
   return num;
 }
 
-void Analyzer::setSkipSelectedFunctionCalls(bool defer) {
-  _skipSelectedFunctionCalls=true; 
-  exprAnalyzer.setSkipSelectedFunctionCalls(true);
+void Analyzer::setSkipSelectedFunctionCalls(bool flag) {
+  _skipSelectedFunctionCalls=flag; 
+  exprAnalyzer.setSkipSelectedFunctionCalls(flag);
+}
+
+void Analyzer::setSkipArrayAccesses(bool skip) {
+  exprAnalyzer.setSkipArrayAccesses(skip);
+}
+
+bool Analyzer::getSkipArrayAccesses() {
+  return exprAnalyzer.getSkipArrayAccesses();
 }
 
 void Analyzer::set_finished(std::vector<bool>& v, bool val) {
@@ -1941,6 +2020,7 @@ std::list<EState> Analyzer::transferFunctionCallExternal(Edge edge, const EState
       return transferAssignOp(assignOp,edge,estate);
     } else {
       // all other cases, evaluate function call as expression
+      //cout<<"DEBUG: external function call: "<<funCall->unparseToString()<<"; evaluating as expression."<<endl;
       list<SingleEvalResultConstInt> res2=exprAnalyzer.evaluateExpression(funCall,currentEState,false);
       ROSE_ASSERT(res2.size()==1);
       SingleEvalResultConstInt evalResult2=*res2.begin();
@@ -2004,14 +2084,15 @@ list<EState> Analyzer::transferIncDecOp(SgNode* nextNodeToAnalyze2, Edge edge, c
     PState newPState=*estate.pstate();
     ConstraintSet cset=*estate.constraints();
 
-    AbstractValue varVal=newPState.readFromMemoryLocation(var);
+    AbstractValue oldVarVal=newPState.readFromMemoryLocation(var);
+    AbstractValue newVarVal;
     AbstractValue const1=1;
     switch(nextNodeToAnalyze2->variantT()) {
     case V_SgPlusPlusOp:
-      varVal=varVal+const1; // overloaded binary + operator
+      newVarVal=oldVarVal+const1; // overloaded binary + operator
       break;
     case V_SgMinusMinusOp:
-      varVal=varVal-const1; // overloaded binary - operator
+      newVarVal=oldVarVal-const1; // overloaded binary - operator
       break;
     default:
       logger[ERROR] << "Operator-AST:"<<AstTerm::astTermToMultiLineString(nextNodeToAnalyze2,2)<<endl;
@@ -2021,7 +2102,7 @@ list<EState> Analyzer::transferIncDecOp(SgNode* nextNodeToAnalyze2, Edge edge, c
       exit(1);
     }
     //newPState[var]=varVal;
-    newPState.writeToMemoryLocation(var,varVal);
+    newPState.writeToMemoryLocation(var,newVarVal);
 
     if(!(*i).result.isTop())
       cset.removeAllConstraintsOfVar(var);
@@ -2050,10 +2131,15 @@ std::list<EState> Analyzer::transferAssignOp(SgAssignOp* nextNodeToAnalyze2, Edg
       // only update integer variables. Ensure values of floating-point variables are not computed
       if(variableIdMapping.hasIntegerType(lhsVar)) {
         newPState.writeToMemoryLocation(lhsVar,(*i).result);
+      } else if(variableIdMapping.hasBoolType(lhsVar)) {
+        newPState.writeToMemoryLocation(lhsVar,(*i).result);
       } else if(variableIdMapping.hasPointerType(lhsVar)) {
         // we assume here that only arrays (pointers to arrays) are assigned
         //newPState[lhsVar]=(*i).result;
         newPState.writeToMemoryLocation(lhsVar,(*i).result);
+      } else {
+        cerr<<"WARNING: Unknown type on LHS side of assignment: "<<nextNodeToAnalyze2->unparseToString()<<" TYPE: "<<variableIdMapping.getType(lhsVar)->unparseToString();
+        cerr<<" TYPE NODE: "<<variableIdMapping.getType(lhsVar)->class_name()<<endl;
       }
       if(!(*i).result.isTop()) {
         cset.removeAllConstraintsOfVar(lhsVar);
@@ -2100,7 +2186,7 @@ std::list<EState> Analyzer::transferAssignOp(SgAssignOp* nextNodeToAnalyze2, Edg
               exit(1);
             }
           } else {
-            logger[ERROR] <<"lhs array access: unkown type of array or pointer."<<endl;
+            logger[ERROR] <<"lhs array access: unknown type of array or pointer."<<endl;
             exit(1);
           }
           AbstractValue arrayElementId;
@@ -2151,6 +2237,11 @@ std::list<EState> Analyzer::transferAssignOp(SgAssignOp* nextNodeToAnalyze2, Edg
       }
       ROSE_ASSERT(resLhs.size()==1);
       AbstractValue lhsPointerValue=(*resLhs.begin()).result;
+      if(lhsPointerValue.isNullPtr()) {
+        getExprAnalyzer()->recordDefinitiveNullPointerDereferenceLocation(estate->label());
+        // no state can follow, return estateList (may be empty)
+        return estateList;
+      }
       if(lhsPointerValue.isTop()) {
         // special case. Expr evaluates to top (should be dereferenced)
         PState pstate2=*(estate->pstate());
@@ -2270,4 +2361,5 @@ set<const EState*> Analyzer::transitionSourceEStateSetOfLabel(Label lab) {
   }
   return estateSet;
 }
+
 #endif

@@ -24,8 +24,11 @@ namespace SPRAY {
     for(RoseAst::iterator i=ast.begin();i!=ast.end();++i) {
       SgNode* node=*i;
       if(SgVariableDeclaration* varDecl=isSgVariableDeclaration(node)) {
-        if(SgStatement* newVarAssignment=buildNormalizedVariableDeclaration(varDecl)) {
-          declAssignList.push_back(std::make_pair(varDecl,newVarAssignment));
+        // do not transform assignments to static variables (must remain initializations because of different semantics)
+        if(!SageInterface::isStatic(varDecl)) {
+          if(SgStatement* newVarAssignment=buildNormalizedVariableDeclaration(varDecl)) {
+            declAssignList.push_back(std::make_pair(varDecl,newVarAssignment));
+          }
         }
         i.skipChildrenOnForward();
       } else {
@@ -33,12 +36,12 @@ namespace SPRAY {
       }
     }
     for(auto declAssign : declAssignList) {
+      // insert new assignment statement after original variable declaration
       SageInterface::insertStatementAfter(declAssign.first, declAssign.second);
     }
   }
 
-  // Given 'Type x=init;' is transformed into 'Type x;' and returns 'x=init;'
-  // return nullptr if provided declaration is in global scope (cannot be normalized)
+
   SgStatement* Lowering::buildNormalizedVariableDeclaration(SgVariableDeclaration* varDecl) {
     ROSE_ASSERT(varDecl);
     // check that variable is within a scope where it can be normalized
@@ -58,7 +61,6 @@ namespace SPRAY {
         SgAssignOp* varAssignOp=SageBuilder::buildAssignOp(declVarRefExp,declInitializer);
         // build exprstatement from assignOp expression
         SgStatement* varAssignStatement=SageBuilder::buildExprStatement(varAssignOp);
-        // insert new assignment statement after original variable declaration
         return varAssignStatement;
       }
     }
@@ -81,27 +83,24 @@ namespace SPRAY {
   void Lowering::normalizeAst(SgNode* root) {
     normalizeSingleStatementsToBlocks(root);
 
-    // TODO1: normalize AST such that all empty blocks contain a null
-    // statement this is only necessary to be able to eliminate
-    // begin/end labels of blocks and avoid true+false edges between
-    // the same nodes in the CFG generation
-
-    // TODO2: normalize AST such that every expression in a statement has as root a SgExpressionRoot node
+    // TODO: normalize AST such that every expression in a statement has as root a SgExpressionRoot node
     // this allows to transform any expression without updating the corresponding child pointer in the enclosing statement
     // normalizeExpressionRootNodes(root);
+
   }
 
-  void Lowering::transformAst(SgNode* root) {
-    normalizeAst(root);
+  void Lowering::runLowering(SgNode* root) {
+    normalizeSingleStatementsToBlocks(root);
     convertAllForsToWhiles(root);
     changeBreakStatementsToGotos(root);
     createLoweringSequence(root);
     applyLoweringSequence();
-    normalizeExpressions(root);
+    bool normalizeOnlyFunctionCalls=true;
+    normalizeExpressions(root,normalizeOnlyFunctionCalls);
+    normalizeAllVariableDeclarations(root);
     if(getInliningOption()) {
       inlineFunctions(root);
     }
-    normalizeAllVariableDeclarations(root);
   }
 
   void Lowering::setInliningOption(bool flag) {
@@ -159,7 +158,7 @@ namespace SPRAY {
 
   void Lowering::normalizeExpression(SgExprStatement* stmt, SgExpression* expr) {
     if(isSgPntrArrRefExp(expr)) {
-        // TODO: evaluate index-expressions
+        // TODO: normalize index-expressions
     } else if(SgAssignOp* assignOp=isSgAssignOp(expr)) {
       //TODO: normalize subexpressions of LHS
       //normalizeExpression(stmt,isSgExpression(SgNodeHelper::getLhs(assignOp)));
@@ -168,11 +167,6 @@ namespace SPRAY {
       //TODO: normalize subexpressions of LHS
       //normalizeExpression(stmt,isSgExpression(SgNodeHelper::getLhs(assignOp)));
       normalizeExpression(stmt,isSgExpression(SgNodeHelper::getRhs(compoundAssignOp)));
-    } else if(SgNodeHelper::isPrefixIncDecOp(expr)||SgNodeHelper::isPostfixIncDecOp(expr)) {
-      /* TODO: ++,-- operators may need to be moved in the generated assignment sequence
-         and replaced with +=/-=.
-      */
-      normalizeExpression(stmt,isSgExpression(SgNodeHelper::getUnaryOpChild(expr)));
     } else if(isSgBinaryOp(expr)) {
       normalizeExpression(stmt,isSgExpression(SgNodeHelper::getLhs(expr)));
       normalizeExpression(stmt,isSgExpression(SgNodeHelper::getRhs(expr)));
@@ -180,16 +174,45 @@ namespace SPRAY {
     } else if(isSgUnaryOp(expr)) {
       normalizeExpression(stmt,isSgExpression(SgNodeHelper::getUnaryOpChild(expr)));
       generateTmpVarAssignment(stmt,expr);
-    } else if(isSgFunctionCallExp(expr)) {
+    } else if(SgFunctionCallExp* funCallExp=isSgFunctionCallExp(expr)) {
       SgExpressionPtrList& expList=SgNodeHelper::getFunctionCallActualParameterList(expr);
       for(SgExpressionPtrList::iterator i=expList.begin();i!=expList.end();++i) {
         normalizeExpression(stmt,*i);
       }
-      generateTmpVarAssignment(stmt,expr);
+      // check if function has a return value
+      SgType* functionReturnType=funCallExp->get_type();
+      //cout<<"DEBUG: function call type: "<<SgNodeHelper::sourceLineColumnToString(funCallExp)<<":"<<functionReturnType->unparseToString()<<endl;
+
+      // generate tmp var only if return value exists and it is used (i.e. there exists an expression as parent).
+      SgNode* parentNode=funCallExp->get_parent();
+      if(!isSgTypeVoid(functionReturnType)
+         &&  isSgExpression(parentNode)
+         && !isSgExpressionRoot(parentNode)) {
+        generateTmpVarAssignment(stmt,expr);
+      }
     }
   }
-  
-  void Lowering::normalizeExpressions(SgNode* node) {
+
+  // temporary filter (also in TFTransformation)
+  bool isWithinBlockStmt(SgExpression* exp) {
+    SgNode* current=exp;
+    while(isSgExpression(current)||isSgExprStatement(current)) {
+      current=current->get_parent();
+    };
+    return isSgBasicBlock(current);
+  }
+
+  bool Lowering::hasFunctionCall(SgExpression* expr) {
+    RoseAst ast(expr);
+    for(auto node:ast) {
+      if(isSgFunctionCallExp(node)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void Lowering::normalizeExpressions(SgNode* node, bool onlyNormalizeFunctionCallExpressions) {
     // TODO: if temporary variables are generated, the initialization-list
     // must be put into a block, otherwise some generated gotos are
     // not legal (crossing initialization).
@@ -201,7 +224,15 @@ namespace SPRAY {
         if(!SgNodeHelper::isCond(exprStmt)) {
           //cout<<"Found SgExprStatement: "<<(*i)->unparseToString()<<endl;
           SgExpression* expr=exprStmt->get_expression();
-          normalizeExpression(exprStmt,expr);
+          if(isWithinBlockStmt(expr)) {
+            if(onlyNormalizeFunctionCallExpressions) {
+              if(hasFunctionCall(expr)) {
+                normalizeExpression(exprStmt,expr);
+              }
+            } else {
+              normalizeExpression(exprStmt,expr);
+            }
+          }
           i.skipChildrenOnForward();
         }
       }
@@ -261,7 +292,7 @@ namespace SPRAY {
     //SgProject* project=isSgProject(root);
     //ROSE_ASSERT(project);
     size_t nInlined = 0;
-    for (int count=0; count<10; ++count) {
+    for (int count=0; count<inlineDepth; ++count) {
       bool changed = false;
         BOOST_FOREACH (SgFunctionCallExp *call, SageInterface::querySubTree<SgFunctionCallExp>(root)) {
           if (doInline(call)) {
