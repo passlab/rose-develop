@@ -110,6 +110,7 @@ namespace CodeThorn {
     
     // initialize command line arguments provided by option "--cl-options" in PState
     void initializeCommandLineArgumentsInState(PState& initialPState);
+    void initializeStringLiteralsInState(PState& initialPState);
 
     // set the size of an element determined by this type
     void setElementSize(VariableId variableId, SgType* elementType);
@@ -148,8 +149,8 @@ namespace CodeThorn {
     std::list<FailedAssertion> getFirstAssertionOccurences(){return _firstAssertionOccurences;}
 
     void setSkipSelectedFunctionCalls(bool defer);
-    void setSkipArrayAccesses(bool skip) { exprAnalyzer.setSkipArrayAccesses(skip); }
-    bool getSkipArrayAccesses() { return exprAnalyzer.getSkipArrayAccesses(); }
+    void setSkipArrayAccesses(bool skip);
+    bool getSkipArrayAccesses();
 
     // specific to the loop-aware exploration modes
     int getIterations() { return _iterations; }
@@ -194,8 +195,9 @@ namespace CodeThorn {
     // enables external function semantics 
     void enableSVCompFunctionSemantics();
     void disableSVCompFunctionSemantics();
-    bool svCompFunctionSemantics() { return _svCompFunctionSemantics; }
-    bool stdFunctionSemantics() { return _stdFunctionSemantics; }
+    bool svCompFunctionSemantics();
+    bool getStdFunctionSemantics();
+    void setStdFunctionSemantics(bool flag);
 
     void setTypeSizeMapping(SgTypeSizeMapping* typeSizeMapping);
     SgTypeSizeMapping* getTypeSizeMapping();
@@ -217,7 +219,15 @@ namespace CodeThorn {
     std::map<std::string,VariableId> globalVarName2VarIdMapping;
     std::vector<bool> binaryBindingAssert;
 
+    // functions related to abstractions during the analysis
+    void eventGlobalTopifyTurnedOn();
+    bool isActiveGlobalTopify();
+    bool isIncompleteSTGReady();
+    bool isPrecise();
 
+    EState createEState(Label label, PState pstate, ConstraintSet cset);
+    EState createEState(Label label, PState pstate, ConstraintSet cset, InputOutput io);
+    bool optionStringLiteralsInState=false;
   protected:
     void printStatusMessage(string s, bool newLineFlag);
 
@@ -244,9 +254,6 @@ namespace CodeThorn {
     EStateSet::ProcessingResult process(EState& s);
     const ConstraintSet* processNewOrExisting(ConstraintSet& cset);
     
-    EState createEState(Label label, PState pstate, ConstraintSet cset);
-    EState createEState(Label label, PState pstate, ConstraintSet cset, InputOutput io);
-
     void recordTransition(const EState* sourceEState, Edge e, const EState* targetEState);
 
     void set_finished(std::vector<bool>& v, bool val);
@@ -256,6 +263,9 @@ namespace CodeThorn {
     // call of the form 'x=f(...)' and returns the varible-id of the
     // lhs, if a valid pointer is provided
     bool isFunctionCallWithAssignment(Label lab,VariableId* varId=0);
+    // this function uses the respective function of ExprAnalyzer and
+    // extracts the result from the ExprAnalyzer data structure.
+    list<EState> evaluateFunctionCallArguments(Edge edge, SgFunctionCallExp* funCall, EState estate, bool useConstraints);
 
     std::list<EState> transferEdgeEState(Edge edge, const EState* estate);
     std::list<EState> transferFunctionCall(Edge edge, const EState* estate);
@@ -291,12 +301,6 @@ namespace CodeThorn {
     std::string labelNameOfAssertLabel(Label lab);
     bool isCppLabeledAssertLabel(Label lab);
     std::list<FailedAssertion> _firstAssertionOccurences;
-
-    // functions related to abstractions during the analysis
-    void eventGlobalTopifyTurnedOn();
-    bool isActiveGlobalTopify();
-    bool isIncompleteSTGReady();
-    bool isPrecise();
 
     // specific to the loop-aware exploration modes
     bool isLoopCondLabel(Label lab);
