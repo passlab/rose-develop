@@ -111,6 +111,7 @@ shared          { return cond_return ( SHARED ); }
 none            { return cond_return ( NONE ); } 
 reduction       { return cond_return ( REDUCTION ); }
 in_reduction    { return cond_return ( IN_REDUCTION ); } /* tracking in_reduction */
+inscan          { return cond_return ( INSCAN ); }
 copyin          { return cond_return ( COPYIN ); }
 inbranch        { return cond_return ( INBRANCH ); }
 notinbranch     { return cond_return ( NOTINBRANCH ); }
