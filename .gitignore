@@ -374,3 +374,5 @@ GTAGS
 # customized files:
 config/depcomp
 config/ltargz.m4
+.idea/
+cmake-build-debug/
