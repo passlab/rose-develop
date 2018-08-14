@@ -1612,6 +1612,10 @@ Grammar::setUpNodes ()
      OmpReductionClause.setDataPrototype("SgOmpClause::omp_reduction_identifier_enum", "identifier", "=e_omp_reduction_unknown",
                           CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
 
+     // reduction(modifier, user-defined identifier : variables)
+     OmpReductionClause.setDataPrototype("SgExpression*", "user_defined_identifier", "= NULL",
+                                         CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);
+
      // tracking in_reduction(op:variables)
      OmpInReductionClause.setDataPrototype("SgOmpClause::omp_reduction_identifier_enum", "identifier", "=e_omp_reduction_unknown",
                           CONSTRUCTOR_PARAMETER, BUILD_ACCESS_FUNCTIONS, NO_TRAVERSAL, NO_DELETE);

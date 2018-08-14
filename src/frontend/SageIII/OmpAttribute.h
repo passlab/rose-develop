@@ -165,6 +165,7 @@ namespace OmpSupport
     e_reduction_task,
     e_reduction_default,
 
+    e_reduction_user_defined_identifier,
     // tracking in_reduction
     e_in_reduction,
     
@@ -253,6 +254,7 @@ namespace OmpSupport
     public:
       omp_construct_enum first_parameter;
       omp_construct_enum second_parameter;
+      std::pair < std::string, SgExpression* > user_defined_parameter;
       std::vector < std::pair < std::string, SgNode* > > variable_list;
 
       ComplexClauseParameters(omp_construct_enum first=e_unknown, omp_construct_enum second=e_unknown) : first_parameter(first), second_parameter(second) {};
@@ -412,6 +414,11 @@ namespace OmpSupport
       //! Get expression of a clause
       std::pair<std::string, SgExpression*>  
         getExpression(omp_construct_enum targetConstruct);
+
+      void addUserDefinedExpression(omp_construct_enum targetConstruct, const std::string& expString, SgExpression*    sgexp=NULL);
+
+      //! Get expression of a clause
+      std::pair<std::string, SgExpression*> getUserDefinedExpression();
 
       //!--------values for some clauses ----------
       //
