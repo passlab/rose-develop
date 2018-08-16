@@ -559,7 +559,6 @@ SgOmpNumThreadsClause
 SgOmpOrderedClause
 SgOmpPrivateClause
 SgOmpReductionClause
-SgOmpInReductionClause
 SgOmpScheduleClause
 SgOmpSharedClause
 SgOmpUntiedClause
@@ -576,7 +575,6 @@ SgOmpAtomicClause
 SgOmpInbranchClause
 SgOmpNotinbranchClause
 SgOmpDependClause
-SgOmpAllocateClause
 SgOpenclAccessModeModifier
 SgOpenStatement
 SgOptions
