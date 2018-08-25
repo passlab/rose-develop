@@ -111,6 +111,14 @@ shared          { return cond_return ( SHARED ); }
 none            { return cond_return ( NONE ); } 
 reduction       { return cond_return ( REDUCTION ); }
 in_reduction    { return cond_return ( IN_REDUCTION ); } /* tracking in_reduction */
+omp_default_mem_alloc    { return cond_return ( OMP_DEFAULT_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
+omp_large_cap_mem_alloc    { return cond_return ( OMP_LARGE_CAP_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
+omp_const_mem_alloc    { return cond_return ( OMP_CONST_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
+omp_high_bw_mem_alloc    { return cond_return ( OMP_HIGH_BW_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
+omp_low_lat_mem_alloc    { return cond_return ( OMP_LOW_LAT_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
+omp_cgroup_mem_alloc    { return cond_return ( OMP_CGROUP_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
+omp_pteam_mem_alloc    { return cond_return ( OMP_PTEAM_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
+omp_thread_mem_alloc    { return cond_return ( OMP_THREAD_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
 inscan          { return cond_return ( INSCAN ); }
 copyin          { return cond_return ( COPYIN ); }
 inbranch        { return cond_return ( INBRANCH ); }
