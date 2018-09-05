@@ -368,11 +368,3 @@ GTAGS
 
 # /projects/compass/extensions/checkers/voidStar/
 /projects/compass/extensions/checkers/voidStar/voidStar.compass.external.makefile
-
-
-
-# customized files:
-config/depcomp
-config/ltargz.m4
-.idea/
-cmake-build-debug/

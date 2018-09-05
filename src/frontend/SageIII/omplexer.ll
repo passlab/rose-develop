@@ -110,7 +110,6 @@ default         { return cond_return ( DEFAULT ); }
 shared          { return cond_return ( SHARED ); } 
 none            { return cond_return ( NONE ); } 
 reduction       { return cond_return ( REDUCTION ); }
-in_reduction    { return cond_return ( IN_REDUCTION ); } /* tracking in_reduction */
 omp_default_mem_alloc    { return cond_return ( OMP_DEFAULT_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
 omp_large_cap_mem_alloc    { return cond_return ( OMP_LARGE_CAP_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
 omp_const_mem_alloc    { return cond_return ( OMP_CONST_MEM_ALLOC ); } /* OpenMP 5.0 allocator */
