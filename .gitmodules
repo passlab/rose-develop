@@ -2,3 +2,7 @@
 	path = src/frontend/CxxFrontend/EDG
 	url = git@github.com:passlab/EDG.git
 	branch = dquinlan/dq-development-dev
+[submodule "src/frontend/SageIII/ompparser"]
+	path = src/frontend/SageIII/ompparser
+	url = git@github.com:passlab/ompparser.git
+	branch = rose
