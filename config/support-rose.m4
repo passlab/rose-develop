@@ -2354,6 +2354,7 @@ src/frontend/SageIII/astHiddenTypeAndDeclarationLists/Makefile
 src/frontend/SageIII/astMerge/Makefile
 src/frontend/SageIII/astPostProcessing/Makefile
 src/frontend/SageIII/astTokenStream/Makefile
+src/frontend/SageIII/ompparser/Makefile
 src/frontend/SageIII/astVisualization/Makefile
 src/frontend/SageIII/includeDirectivesProcessing/Makefile
 src/frontend/SageIII/sage.docs

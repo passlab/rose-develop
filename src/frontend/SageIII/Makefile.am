@@ -22,9 +22,9 @@ fSageSupportPath=sage_support#
 # SUBDIRS = astFileIO astMerge astFixup astPostProcessing sageInterface virtualCFG astTokenStream astHiddenTypeAndDeclarationLists astVisualization astFromString includeDirectivesProcessing
 
 if ROSE_USE_INTERNAL_FRONTEND_DEVELOPMENT
-   SUBDIRS = astFixup astPostProcessing sageInterface astVisualization virtualCFG includeDirectivesProcessing
+   SUBDIRS = astFixup astPostProcessing sageInterface astVisualization virtualCFG includeDirectivesProcessing ompparser
 else
-   SUBDIRS = astFileIO astMerge astFixup astPostProcessing sageInterface virtualCFG astTokenStream astHiddenTypeAndDeclarationLists astVisualization astFromString includeDirectivesProcessing
+   SUBDIRS = astFileIO astMerge astFixup astPostProcessing sageInterface virtualCFG astTokenStream astHiddenTypeAndDeclarationLists astVisualization astFromString includeDirectivesProcessing ompparser
 endif
 
 # DQ (12/29/2009): This is only used to handle generated code as smaller files.
@@ -242,7 +242,8 @@ libsage3_la_LIBADD  = \
 	sageInterface/libsageInterface.la \
    astVisualization/libastVisualization.la \
 	virtualCFG/libvirtualCFG.la \
-   includeDirectivesProcessing/libincludeDirectivesProcessing.la
+   includeDirectivesProcessing/libincludeDirectivesProcessing.la \
+	ompparser/libOmpparser.la
 else
 libsage3_la_LIBADD  = \
 	astFixup/libastFixup.la \
@@ -254,7 +255,8 @@ libsage3_la_LIBADD  = \
         astVisualization/libastVisualization.la \
         astFromString/libAstFromString.la \
         astHiddenTypeAndDeclarationLists/libastHiddenTypeAndDeclarationLists.la \
-        includeDirectivesProcessing/libincludeDirectivesProcessing.la
+        includeDirectivesProcessing/libincludeDirectivesProcessing.la \
+	ompparser/libOmpparser.la
 endif
 else
 
@@ -267,7 +269,8 @@ libsage3_la_LIBADD  = \
         astVisualization/libastVisualization.la \
         astFromString/libAstFromString.la \
         astHiddenTypeAndDeclarationLists/libastHiddenTypeAndDeclarationLists.la \
-        includeDirectivesProcessing/libincludeDirectivesProcessing.la
+        includeDirectivesProcessing/libincludeDirectivesProcessing.la \
+	ompparser/libOmpparser.la
 endif
 
 # DQ (6/25/2011): Readded this directory so that we can support the older behavior as a default

@@ -672,6 +672,7 @@ lcov:
 -d src/frontend/SageIII/sageInterface \
 -d src/frontend/SageIII/virtualCFG \
 -d src/frontend/SageIII/astTokenStream \
+-d src/frontend/SageIII/ompparser \
 -d src/frontend/SageIII/astHiddenTypeAndDeclarationLists \
 -d src/frontend/SageIII/astVisualization \
 -d src/frontend/SageIII/astFromString \
@@ -681,6 +682,7 @@ lcov:
 -d src/frontend/SageIII/astMerge/.libs \
 -d src/frontend/SageIII/sageInterface/.libs \
 -d src/frontend/SageIII/virtualCFG/.libs \
+-d src/frontend/SageIII/ompparser/.libs \
 -d src/frontend/SageIII/astTokenStream/.libs \
 -d src/frontend/SageIII/astVisualization/.libs \
 -d src/frontend/SageIII/astFromString/.libs \

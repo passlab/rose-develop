@@ -352,6 +352,7 @@ ROSE_INCLUDES_WITHOUT_BOOST_ISYSTEM_PATH = \
      -I$(top_srcdir)/src/frontend/SageIII/sageInterface \
      -I$(top_srcdir)/src/frontend/SageIII/virtualCFG \
      -I$(top_srcdir)/src/frontend/SageIII/astTokenStream \
+     -I$(top_srcdir)/src/frontend/SageIII/ompparser \
      -I$(top_srcdir)/src/frontend/SageIII/astHiddenTypeAndDeclarationLists \
      -I$(top_builddir)/src/frontend/SageIII/astFileIO \
      -I$(top_srcdir)/src/frontend/SageIII/astFromString \
