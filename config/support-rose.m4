@@ -1021,6 +1021,7 @@ if test "x$enable_experimental_matlab_frontend" = "xyes"; then
    fi
 fi
 
+ROSE_SUPPORT_LIBOMPPARSER
 
 ROSE_SUPPORT_MINT
 
