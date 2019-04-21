@@ -4071,6 +4071,7 @@ Grammar::GrammarNodeInfo Grammar::getGrammarNodeInfo(AstNodeClass* grammarnode) 
      // DQ (12/21/2011): Added exception for SgTemplateVariableDeclaration derived from SgVariableDeclaration.
         ||nodeName == "SgTemplateVariableDeclaration"
         ||nodeName == "SgOmpClauseBodyStatement"
+        ||nodeName == "SgOmpMetadirectiveStatement"
         ||nodeName == "SgOmpParallelStatement"
         ||nodeName == "SgOmpSectionsStatement"
         ||nodeName == "SgOmpTargetStatement"
@@ -4372,6 +4373,7 @@ Grammar::buildTreeTraversalFunctions(AstNodeClass& node, StringUtility::FileWith
                // More exceptional cases for SgOmpClauseBodyStatement and its derived classes
               // We allow them to have mixed members (simple member and container member)
                else if (string(node.getName()) == "SgOmpClauseBodyStatement"
+                 ||string(node.getName()) == "SgOmpMetadirectiveStatement"
                  ||string(node.getName()) == "SgOmpParallelStatement"
                  ||string(node.getName()) == "SgOmpSingleStatement"
                  ||string(node.getName()) == "SgOmpSimdStatement"
@@ -4481,6 +4483,7 @@ Grammar::buildTreeTraversalFunctions(AstNodeClass& node, StringUtility::FileWith
                // More exceptional cases for SgOmpClauseBodyStatement and its derived classes
               // We allow them to have mixed members
                else if (string(node.getName()) == "SgOmpClauseBodyStatement"
+                 ||string(node.getName()) == "SgOmpMetadirectiveStatement"
                  ||string(node.getName()) == "SgOmpParallelStatement"
                  ||string(node.getName()) == "SgOmpSingleStatement"
                  ||string(node.getName()) == "SgOmpSimdStatement"

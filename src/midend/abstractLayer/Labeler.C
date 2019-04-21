@@ -278,6 +278,7 @@ int Labeler::isLabelRelevantNode(SgNode* node) {
   case V_SgOmpForStatement:
   case V_SgOmpForSimdStatement:
   case V_SgOmpMasterStatement:
+  case V_SgOmpMetadirectiveStatement:
   case V_SgOmpOrderedStatement:
   case V_SgOmpParallelStatement:
   case V_SgOmpSectionStatement:
